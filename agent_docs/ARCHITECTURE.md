@@ -2,7 +2,7 @@
 
 ## Purpose
 Redirect visitors to the correct app store (or marketing site fallback) based on their
-`User-Agent` header. Two deployment targets are provided as separate sub-projects.
+`User-Agent` header. Three deployment targets are provided as separate sub-projects.
 
 ## Redirect targets
 | Platform | URL |
@@ -79,12 +79,55 @@ npm run deploy
 
 ---
 
+## Variant: `aws/`
+
+AWS CloudFront Function (JS runtime 2.0), fronted by an existing CloudFront + S3 stack.
+
+The function runs on the **viewer-request** event. Requests to `/store` are redirected
+based on `User-Agent`; everything else returns the request object unchanged and CloudFront
+serves it from S3 as normal.
+
+No IAM role, no Lambda infrastructure — just a few KB of JS associated with a cache behaviour.
+
+| File | Purpose |
+|------|---------|
+| `src/redirect.mjs` | Pure UA-sniffing logic (ESM) — imported by tests |
+| `src/function.js` | Self-contained CloudFront Function (no imports — CF runtime has no module system); this is what gets deployed |
+| `tools/local-server.js` | Dev/test-only HTTP server — wraps `redirect.mjs` so Playwright can drive it locally |
+| `tools/deploy.mjs` | Creates/updates the CF Function, publishes it, prints the ARN to associate |
+| `package.json` | Vitest, Playwright dev deps |
+| `vitest.config.js` | Vitest config |
+| `playwright.config.js` | Playwright config — starts the local server on port 8788 |
+| `tests/unit/handler.test.js` | Unit tests (Vitest) — imports `redirect.mjs` directly |
+| `tests/e2e/redirect.spec.js` | Device-spoofing E2E tests (Playwright) |
+
+### CF Function constraints
+- **No module system** — `src/function.js` must be self-contained. The UA logic is inlined
+  there; `redirect.mjs` is the canonical copy used by tests.
+- **No environment variables** — URLs are hardcoded (same as the other variants).
+- CloudFront must attach a **published** function — `deploy.mjs` handles the publish step.
+- CloudFront Functions are global; no region flag needed.
+
+### Deploy
+```bash
+cd aws
+npm install
+npm run deploy   # create-or-update + publish; prints ARN on first and subsequent runs
+```
+
+Associate the printed ARN with a **viewer-request** trigger on the CloudFront behaviour
+(Console → Distribution → Behaviours → Edit → Function associations, or via IaC), then
+deploy the distribution.
+
+---
+
 ## Testing
 
 ### Unit tests (both variants)
 ```bash
 cd cloudflare && npm test
 cd firebase && npm test
+cd aws && npm test
 ```
 
 ### E2E tests (Playwright)
@@ -96,6 +139,7 @@ Then:
 ```bash
 cd cloudflare && npm run test:e2e
 cd firebase && npm run test:e2e
+cd aws && npm run test:e2e
 ```
 Playwright starts the dev server automatically, spoofs device user-agents using
 built-in device descriptors (iPhone 15, iPad Pro 11, Pixel 7, Galaxy S9+), and

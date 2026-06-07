@@ -8,7 +8,7 @@ Serverless redirect that reads the visitor's `User-Agent` and sends them to the 
 | Android | [Google Play](https://play.google.com/store/apps/details?id=com.gogogamearranger.app) |
 | Everything else | [gogogamearranger.com](https://gogogamearranger.com/) |
 
-Two deployment targets are provided as independent sub-projects.
+Three deployment targets are provided as independent sub-projects.
 
 ## Prerequisites
 
@@ -73,6 +73,32 @@ npm run test:e2e
 
 # E2E against deployed site
 BASE_URL=https://appstore-redirect-demo.web.app npm run test:e2e
+```
+
+---
+
+## AWS CloudFront Function — `aws/`
+
+Runs as a CloudFront **viewer-request** function. Redirects `/store` based on
+`User-Agent`; all other paths pass through to the S3 origin untouched. No Lambda, no IAM role.
+
+### Deploy
+```bash
+cd aws
+npm install
+npm run deploy
+```
+`npm run deploy` creates/updates and publishes the function, then prints the ARN to
+associate with a viewer-request trigger on your CloudFront behaviour. Full steps in
+`agent_docs/ARCHITECTURE.md`.
+
+### Test
+```bash
+# Unit tests
+npm test
+
+# E2E against the local edge server
+npm run test:e2e
 ```
 
 ---
